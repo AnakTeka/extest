@@ -15,27 +15,24 @@ die() { echo "Error: $1" >&2; exit 1; }
 cp "$KEYD_DIR/default.conf" "$KEYD_DIR/default.conf.bak"
 echo "Backed up to $KEYD_DIR/default.conf.bak"
 
-# Extract everything after [ids] section into common (excluding [ids] itself)
+# Extract [main] and other sections (not [ids]) into common
 awk '
     /^\[ids\]/ { in_ids=1; next }
-    /^\[/ && in_ids { in_ids=0 }
-    !in_ids { print }
+    /^\[/ { in_ids=0 }
+    !in_ids
 ' "$KEYD_DIR/default.conf" > "$KEYD_DIR/common"
 echo "Created $KEYD_DIR/common"
 
-# Extract [ids] section and add extest exclusion
-{
-    echo "[ids]"
-    awk '
-        /^\[ids\]/ { in_ids=1; next }
-        /^\[/ { in_ids=0 }
-        in_ids && !/1234:5678/ { print }
-    ' "$KEYD_DIR/default.conf"
-    echo "-1234:5678"
-    echo ""
-    echo "[main]"
-    echo "include common"
-} > "$KEYD_DIR/default.conf"
+# Create new default.conf with [ids] preserved + extest excluded
+cat > "$KEYD_DIR/default.conf" << 'EOF'
+[ids]
+*
+-1234:5678
+-feed:beef
+
+[main]
+include common
+EOF
 echo "Updated $KEYD_DIR/default.conf"
 
 # Create extest.conf
