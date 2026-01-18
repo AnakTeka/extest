@@ -1,10 +1,12 @@
 # Extest - X11 XTEST to uinput Redirector
 
-Extest is an LD_PRELOAD library that intercepts X11 XTEST input injection calls and redirects keyboard/button events through uinput, allowing tools like [keyd](https://github.com/rvaiya/keyd) to intercept and remap them.
+**Make keyd work with Deskflow (Synergy/Barrier) on Linux X11**
 
-## Use Case
+Extest is an LD_PRELOAD library that intercepts X11 XTEST input injection calls and redirects keyboard/button events through uinput, allowing [keyd](https://github.com/rvaiya/keyd) to intercept and remap them.
 
-When using [Deskflow](https://github.com/deskflow/deskflow) (software KVM) to control a Linux machine from another computer, the input is injected via X11's XTEST extension. Since XTEST operates above the kernel input layer, key remapping daemons like keyd cannot intercept this input.
+## The Problem
+
+When using [Deskflow](https://github.com/deskflow/deskflow) (software KVM, formerly Synergy/Barrier) to control a Linux machine from another computer, keyd cannot remap the keyboard input. This is because Deskflow injects input via X11's XTEST extension, which operates above the kernel input layer where keyd works.
 
 This library solves that by:
 - **Keyboard events** → Redirected through uinput (keyd can intercept)
@@ -28,6 +30,10 @@ The library will be at `target/x86_64-unknown-linux-gnu/release/libextest.so`.
 ### With Deskflow
 
 ```sh
+# With GUI
+LD_PRELOAD=/path/to/libextest.so deskflow
+
+# Or directly with deskflow-core
 LD_PRELOAD=/path/to/libextest.so deskflow-core client <server-name>
 ```
 
@@ -71,3 +77,7 @@ Mouse motion must use real XTEST because uinput absolute/relative positioning do
 Based on [Supreeeme/extest](https://github.com/Supreeeme/extest), originally developed for Steam Controller on Wayland. Modified to:
 - Work on X11 (removed Wayland dependency for screen size detection)
 - Pass mouse motion through to real XTEST for proper cursor movement
+
+## Keywords
+
+Deskflow keyd uinput, Synergy keyd, Barrier keyd, key remapping Deskflow, keyd not working with Deskflow, software KVM key remapping Linux
