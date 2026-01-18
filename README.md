@@ -1,36 +1,73 @@
-# Extest - X11 XTEST Reimplementation for Steam Controller on Wayland
+# Extest - X11 XTEST to uinput Redirector
 
-Extest is a drop in replacement for the X11 XTEST extension. It creates a virtual device with the uinput kernel module.
-It's been primarily developed for allowing the desktop functionality on the Steam Controller to work while Steam is open on Wayland.
+Extest is an LD_PRELOAD library that intercepts X11 XTEST input injection calls and redirects keyboard/button events through uinput, allowing tools like [keyd](https://github.com/rvaiya/keyd) to intercept and remap them.
+
+## Use Case
+
+When using [Deskflow](https://github.com/deskflow/deskflow) (software KVM) to control a Linux machine from another computer, the input is injected via X11's XTEST extension. Since XTEST operates above the kernel input layer, key remapping daemons like keyd cannot intercept this input.
+
+This library solves that by:
+- **Keyboard events** → Redirected through uinput (keyd can intercept)
+- **Mouse buttons** → Redirected through uinput (keyd can intercept)
+- **Mouse motion** → Passed through to real XTEST (required for X11 cursor movement)
+
+## Building
+
+```sh
+# Install Rust if not already installed
+# https://www.rust-lang.org/learn/get-started
+
+# Build 64-bit library
+cargo build --release --target x86_64-unknown-linux-gnu
+```
+
+The library will be at `target/x86_64-unknown-linux-gnu/release/libextest.so`.
 
 ## Usage
 
-Be sure you have [Rust](https://www.rust-lang.org/learn/get-started) installed.
-You will also need to install a 32 bit Rust toolchain.
+### With Deskflow
 
 ```sh
-rustup target add i686-unknown-linux-gnu
-cargo build --release
+LD_PRELOAD=/path/to/libextest.so deskflow-core client <server-name>
 ```
 
-This will create a library named `libextest.so` in `target/i686-unknown-linux-gnu/release`.
-Note that this library is 32 bit by default because Steam is a 32 bit application.
+### Configure keyd
 
-You will also need to add your user to the `input` group if not added already, so that your user can be allowed to actually create fake devices:
+Add the extest device to `/etc/keyd/default.conf`:
+
+```
+[ids]
+*
+1234:5678
+-feed:beef
+```
+
+Then restart keyd:
 
 ```sh
-sudo usermod -a -G input <your username>
+sudo systemctl restart keyd
 ```
 
-You can then use `LD_PRELOAD` to override any app that wants to use XTEST functions that have been reimplemented by Extest. Example:
+### Verify it works
 
 ```sh
-LD_PRELOAD=/path/to/libextest.so steam
+keyd -m
 ```
 
-The repository also comes with a script to automatically override Steam's desktop file so that whenever you launch Steam from the desktop file
-(i.e. via desktop icon or application menu) Extest will be automatically preloaded. Just run it like so:
+You should see `extest fake device` in the device list and keyboard events coming through it.
 
-```sh
-./override_steam_desktop_file.sh
-```
+## How it Works
+
+The library uses `LD_PRELOAD` to intercept calls to:
+- `XTestFakeKeyEvent` - Redirected to uinput
+- `XTestFakeButtonEvent` - Redirected to uinput
+- `XTestFakeMotionEvent` - Passed through to real XTEST
+- `XTestFakeRelativeMotionEvent` - Passed through to real XTEST
+
+Mouse motion must use real XTEST because uinput absolute/relative positioning doesn't move the X11 cursor.
+
+## Credits
+
+Based on [Supreeeme/extest](https://github.com/Supreeeme/extest), originally developed for Steam Controller on Wayland. Modified to:
+- Work on X11 (removed Wayland dependency for screen size detection)
+- Pass mouse motion through to real XTEST for proper cursor movement

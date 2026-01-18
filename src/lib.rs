@@ -1,15 +1,15 @@
 mod steam_keys;
 use steam_keys::KEYS;
 
-mod wayland;
-use wayland::get_axes_range;
+mod x11_screen;
+use x11_screen::get_axes_range;
 
 use evdev::{
     uinput::VirtualDevice, AbsInfo, AbsoluteAxisCode, AttributeSet, EventType, InputEvent, KeyCode,
     RelativeAxisCode, UinputAbsSetup,
 };
 use once_cell::sync::Lazy;
-use std::ffi::{c_int, c_uint, c_ulong};
+use std::ffi::{c_int, c_uint, c_ulong, c_void, CStr};
 use std::sync::Mutex;
 
 // Opaque type
@@ -18,6 +18,35 @@ pub struct Display {
     _data: [u8; 0],
     _marker: core::marker::PhantomData<(*mut u8, core::marker::PhantomPinned)>,
 }
+
+// dlsym constants
+const RTLD_NEXT: *mut c_void = -1isize as *mut c_void;
+
+#[link(name = "dl")]
+extern "C" {
+    fn dlsym(handle: *mut c_void, symbol: *const i8) -> *mut c_void;
+}
+
+// Function pointer types for real XTest functions
+type XTestFakeMotionEventFn = unsafe extern "C" fn(*mut Display, c_int, c_int, c_int, c_ulong) -> c_int;
+type XTestFakeRelativeMotionEventFn = unsafe extern "C" fn(*mut Display, c_int, c_int, c_ulong) -> c_int;
+
+// Get real XTest functions via dlsym
+static REAL_XTEST_MOTION: Lazy<XTestFakeMotionEventFn> = Lazy::new(|| unsafe {
+    let sym = dlsym(RTLD_NEXT, b"XTestFakeMotionEvent\0".as_ptr() as *const i8);
+    if sym.is_null() {
+        panic!("Failed to find real XTestFakeMotionEvent");
+    }
+    std::mem::transmute(sym)
+});
+
+static REAL_XTEST_RELATIVE_MOTION: Lazy<XTestFakeRelativeMotionEventFn> = Lazy::new(|| unsafe {
+    let sym = dlsym(RTLD_NEXT, b"XTestFakeRelativeMotionEvent\0".as_ptr() as *const i8);
+    if sym.is_null() {
+        panic!("Failed to find real XTestFakeRelativeMotionEvent");
+    }
+    std::mem::transmute(sym)
+});
 
 static DEVICE: Lazy<Mutex<VirtualDevice>> = Lazy::new(|| {
     let size = get_axes_range();
@@ -164,35 +193,25 @@ pub extern "C" fn XTestFakeButtonEvent(
     1
 }
 
+// Mouse motion - pass through to real XTest (required for X11 cursor movement)
 #[no_mangle]
 pub extern "C" fn XTestFakeRelativeMotionEvent(
-    _: *mut Display,
+    display: *mut Display,
     x: c_int,
     y: c_int,
-    _: c_ulong,
+    delay: c_ulong,
 ) -> c_int {
-    let mut dev = DEVICE.lock().unwrap();
-    let events = [
-        InputEvent::new_now(EventType::RELATIVE.0, RelativeAxisCode::REL_X.0, x),
-        InputEvent::new_now(EventType::RELATIVE.0, RelativeAxisCode::REL_Y.0, y),
-    ];
-    dev.emit(&events).unwrap();
-    1
+    unsafe { REAL_XTEST_RELATIVE_MOTION(display, x, y, delay) }
 }
 
+// Mouse motion - pass through to real XTest (required for X11 cursor movement)
 #[no_mangle]
 pub extern "C" fn XTestFakeMotionEvent(
-    _: *mut Display,
-    _: c_int,
+    display: *mut Display,
+    screen_number: c_int,
     x: c_int,
     y: c_int,
-    _: c_ulong,
+    delay: c_ulong,
 ) -> c_int {
-    let mut dev = DEVICE.lock().unwrap();
-    let events = [
-        InputEvent::new_now(EventType::ABSOLUTE.0, AbsoluteAxisCode::ABS_X.0, x),
-        InputEvent::new_now(EventType::ABSOLUTE.0, AbsoluteAxisCode::ABS_Y.0, y),
-    ];
-    dev.emit(&events).unwrap();
-    1
+    unsafe { REAL_XTEST_MOTION(display, screen_number, x, y, delay) }
 }
