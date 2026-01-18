@@ -16,9 +16,10 @@ cp "$KEYD_DIR/default.conf" "$KEYD_DIR/default.conf.bak"
 echo "Backed up to $KEYD_DIR/default.conf.bak"
 
 # Extract [main] and other sections (not [ids]) into common
+# Skip section headers like [main] so include works properly
 awk '
     /^\[ids\]/ { in_ids=1; next }
-    /^\[/ { in_ids=0 }
+    /^\[/ { in_ids=0; next }
     !in_ids
 ' "$KEYD_DIR/default.conf" > "$KEYD_DIR/common"
 echo "Created $KEYD_DIR/common"
