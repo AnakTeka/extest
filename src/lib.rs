@@ -1,6 +1,4 @@
-mod steam_keys;
-use steam_keys::KEYS;
-
+mod keys;
 mod x11_screen;
 use x11_screen::get_axes_range;
 
@@ -63,7 +61,7 @@ static DEVICE: Lazy<Mutex<VirtualDevice>> = Lazy::new(|| {
                     KeyCode::BTN_SIDE,
                 ]
                 .into_iter()
-                .chain(KEYS.iter().copied()),
+                .chain(keys::all_keys()),
             ))
             .unwrap()
             .with_relative_axes(&AttributeSet::from_iter([
