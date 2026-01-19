@@ -9,6 +9,20 @@ use evdev::{
 use once_cell::sync::Lazy;
 use std::ffi::{c_int, c_uint, c_ulong, c_void, CStr};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicI32, Ordering};
+
+// Track last cursor position for converting absolute to relative motion
+static LAST_X: AtomicI32 = AtomicI32::new(-1);
+static LAST_Y: AtomicI32 = AtomicI32::new(-1);
+
+// Check if XTest passthrough should be disabled (for Moonlight compatibility)
+static NO_XTEST: Lazy<bool> = Lazy::new(|| {
+    let enabled = std::env::var("EXTEST_NO_XTEST").is_ok();
+    if enabled {
+        eprintln!("extest: EXTEST_NO_XTEST mode - mouse motion via uinput only (for Moonlight)");
+    }
+    enabled
+});
 
 // Opaque type
 #[repr(C)]
@@ -48,6 +62,7 @@ static REAL_XTEST_RELATIVE_MOTION: Lazy<XTestFakeRelativeMotionEventFn> = Lazy::
 
 static DEVICE: Lazy<Mutex<VirtualDevice>> = Lazy::new(|| {
     let size = get_axes_range();
+    eprintln!("extest: keyboard/buttons via uinput, mouse motion via both uinput+XTest");
     Mutex::new(
         VirtualDevice::builder()
             .unwrap()
@@ -192,7 +207,7 @@ pub extern "C" fn XTestFakeButtonEvent(
     1
 }
 
-// Mouse motion - pass through to real XTest (required for X11 cursor movement)
+// Mouse motion - send to both uinput (for Moonlight) and XTest (for X11 cursor)
 #[no_mangle]
 pub extern "C" fn XTestFakeRelativeMotionEvent(
     display: *mut Display,
@@ -200,10 +215,25 @@ pub extern "C" fn XTestFakeRelativeMotionEvent(
     y: c_int,
     delay: c_ulong,
 ) -> c_int {
-    unsafe { REAL_XTEST_RELATIVE_MOTION(display, x, y, delay) }
+    // Send to uinput for apps like Moonlight that capture raw input
+    // Only send reasonable deltas (filter out large warp events from Deskflow)
+    const MAX_DELTA: c_int = 127;
+    if x.abs() <= MAX_DELTA && y.abs() <= MAX_DELTA {
+        let mut dev = DEVICE.lock().unwrap();
+        let events = [
+            InputEvent::new_now(EventType::RELATIVE.0, RelativeAxisCode::REL_X.0, x),
+            InputEvent::new_now(EventType::RELATIVE.0, RelativeAxisCode::REL_Y.0, y),
+        ];
+        let _ = dev.emit(&events);
+    }
+    // Pass through to real XTest for X11 cursor movement (unless NO_XTEST mode)
+    if !*NO_XTEST {
+        unsafe { REAL_XTEST_RELATIVE_MOTION(display, x, y, delay) };
+    }
+    1
 }
 
-// Mouse motion - pass through to real XTest (required for X11 cursor movement)
+// Mouse motion - send to both uinput (for Moonlight) and XTest (for X11 cursor)
 #[no_mangle]
 pub extern "C" fn XTestFakeMotionEvent(
     display: *mut Display,
@@ -212,5 +242,35 @@ pub extern "C" fn XTestFakeMotionEvent(
     y: c_int,
     delay: c_ulong,
 ) -> c_int {
-    unsafe { REAL_XTEST_MOTION(display, screen_number, x, y, delay) }
+    // Convert absolute to relative motion for uinput (Moonlight expects relative)
+    {
+        let last_x = LAST_X.load(Ordering::Relaxed);
+        let last_y = LAST_Y.load(Ordering::Relaxed);
+
+        // Only send relative motion if we have a previous position
+        // Filter out large deltas (warp events)
+        const MAX_DELTA: c_int = 127;
+        if last_x >= 0 && last_y >= 0 {
+            let dx = x - last_x;
+            let dy = y - last_y;
+
+            if (dx != 0 || dy != 0) && dx.abs() <= MAX_DELTA && dy.abs() <= MAX_DELTA {
+                let mut dev = DEVICE.lock().unwrap();
+                let events = [
+                    InputEvent::new_now(EventType::RELATIVE.0, RelativeAxisCode::REL_X.0, dx),
+                    InputEvent::new_now(EventType::RELATIVE.0, RelativeAxisCode::REL_Y.0, dy),
+                ];
+                let _ = dev.emit(&events);
+            }
+        }
+
+        // Update last position
+        LAST_X.store(x, Ordering::Relaxed);
+        LAST_Y.store(y, Ordering::Relaxed);
+    }
+    // Pass through to real XTest for X11 cursor movement (unless NO_XTEST mode)
+    if !*NO_XTEST {
+        unsafe { REAL_XTEST_MOTION(display, screen_number, x, y, delay) };
+    }
+    1
 }
