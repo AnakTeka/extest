@@ -91,6 +91,9 @@ pub const KEYS: &[KeyCode] = &[
     KeyCode::KEY_PREVIOUSSONG,
     KeyCode::KEY_NEXTSONG,
     KeyCode::KEY_PLAYPAUSE,
+    KeyCode::KEY_SYSRQ,     // Print Screen
+    KeyCode::KEY_SCROLLLOCK,
+    KeyCode::KEY_PAUSE,
     KeyCode::KEY_INSERT,
     KeyCode::KEY_HOME,
     KeyCode::KEY_PAGEUP,
