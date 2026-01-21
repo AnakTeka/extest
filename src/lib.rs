@@ -3,8 +3,8 @@ mod x11_screen;
 use x11_screen::get_axes_range;
 
 use evdev::{
-    uinput::VirtualDevice, AbsInfo, AbsoluteAxisCode, AttributeSet, EventType, InputEvent, KeyCode,
-    RelativeAxisCode, UinputAbsSetup,
+    uinput::VirtualDevice, AbsInfo, AbsoluteAxisCode, AttributeSet, BusType, EventType, InputEvent,
+    InputId, KeyCode, RelativeAxisCode, UinputAbsSetup,
 };
 use once_cell::sync::Lazy;
 use std::ffi::{c_int, c_uint, c_ulong, c_void, CStr};
@@ -52,6 +52,7 @@ static DEVICE: Lazy<Mutex<VirtualDevice>> = Lazy::new(|| {
         VirtualDevice::builder()
             .unwrap()
             .name("extest fake device")
+            .input_id(InputId::new(BusType::BUS_VIRTUAL, 0xe17e, 0x5700, 1))
             .with_keys(&AttributeSet::from_iter(
                 [
                     KeyCode::BTN_LEFT,
