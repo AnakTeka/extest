@@ -1,16 +1,18 @@
 # Extest - X11 XTEST to uinput Redirector
 
-**Make keyd work with Deskflow (Synergy/Barrier) on Linux X11**
+> Fork of [Supreeeme/extest](https://github.com/Supreeeme/extest), originally created for Steam Controller on Wayland. Modified to work on X11.
 
-Extest is an LD_PRELOAD library that intercepts X11 XTEST input injection calls and redirects keyboard/button events through uinput, allowing [keyd](https://github.com/rvaiya/keyd) to intercept and remap them.
+**Redirects X11 XTEST input to uinput, enabling keyd/KMonad and other evdev-based tools to intercept Deskflow input**
+
+Extest is an LD_PRELOAD library that intercepts X11 XTEST input injection calls and redirects keyboard/button events through uinput, making them visible to kernel-level input tools like [keyd](https://github.com/rvaiya/keyd), [KMonad](https://github.com/kmonad/kmonad), and [interception-tools](https://gitlab.com/interception/linux/tools).
 
 ## The Problem
 
-When using [Deskflow](https://github.com/deskflow/deskflow) (software KVM, formerly Synergy/Barrier) to control a Linux machine from another computer, keyd cannot remap the keyboard input. This is because Deskflow injects input via X11's XTEST extension, which operates above the kernel input layer where keyd works.
+When using [Deskflow](https://github.com/deskflow/deskflow), [Input Leap](https://github.com/input-leap/input-leap), Synergy, or Barrier (software KVM solutions) to control a Linux machine from another computer, evdev-based tools like keyd cannot see the input. This is because these applications inject input via X11's XTEST extension, which operates above the kernel input layer.
 
 This library solves that by:
-- **Keyboard events** → Redirected through uinput (keyd can intercept)
-- **Mouse buttons** → Redirected through uinput (keyd can intercept)
+- **Keyboard events** → Redirected through uinput (visible to evdev tools)
+- **Mouse buttons** → Redirected through uinput (visible to evdev tools)
 - **Mouse motion** → Passed through to real XTEST (required for X11 cursor movement)
 
 ## Building
@@ -37,7 +39,7 @@ LD_PRELOAD=/path/to/libextest.so deskflow
 LD_PRELOAD=/path/to/libextest.so deskflow-core client <server-name>
 ```
 
-### Configure keyd
+### Configure keyd (example)
 
 Add the extest device to `/etc/keyd/default.conf`:
 
@@ -72,12 +74,12 @@ The library uses `LD_PRELOAD` to intercept calls to:
 
 Mouse motion must use real XTEST because uinput absolute/relative positioning doesn't move the X11 cursor.
 
-## Credits
+## Changes from Original
 
-Based on [Supreeeme/extest](https://github.com/Supreeeme/extest), originally developed for Steam Controller on Wayland. Modified to:
-- Work on X11 (removed Wayland dependency for screen size detection)
-- Pass mouse motion through to real XTEST for proper cursor movement
+- Replaced Wayland screen detection with X11 (`XDisplayWidth`/`XDisplayHeight`)
+- Mouse motion passes through to real XTEST (required for X11 cursor movement)
+- Keyboard and button events redirected to uinput
 
 ## Keywords
 
-Deskflow keyd uinput, Synergy keyd, Barrier keyd, key remapping Deskflow, keyd not working with Deskflow, software KVM key remapping Linux
+Deskflow keyd uinput, Deskflow KMonad, Input Leap keyd, Synergy keyd, Barrier keyd, key remapping Deskflow, software KVM key remapping Linux, evdev Deskflow

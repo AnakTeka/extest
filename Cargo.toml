@@ -2,6 +2,11 @@
 name = "extest"
 version = "1.0.3"
 edition = "2021"
+description = "LD_PRELOAD library that redirects X11 XTEST input to uinput, enabling keyd/KMonad and other evdev tools to intercept Deskflow input"
+repository = "https://github.com/AnakTeka/extest"
+license = "MIT"
+keywords = ["xtest", "uinput", "keyd", "deskflow", "input-leap"]
+categories = ["hardware-support"]
 
 [lib]
 crate-type = ['cdylib']
