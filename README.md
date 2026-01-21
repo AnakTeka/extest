@@ -41,7 +41,7 @@ LD_PRELOAD=/path/to/libextest.so deskflow-core client <server-name>
 
 ### Configure keyd (example)
 
-Add the extest device to `/etc/keyd/default.conf`:
+By default, keyd ignores virtual input devices. You need to explicitly add the extest device ID (`1234:5678`) to `/etc/keyd/default.conf`:
 
 ```
 [ids]
