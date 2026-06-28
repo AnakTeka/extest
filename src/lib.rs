@@ -1,10 +1,8 @@
 mod keys;
-mod x11_screen;
-use x11_screen::get_axes_range;
 
 use evdev::{
-    uinput::VirtualDevice, AbsInfo, AbsoluteAxisCode, AttributeSet, BusType, EventType, InputEvent,
-    InputId, KeyCode, RelativeAxisCode, UinputAbsSetup,
+    uinput::VirtualDevice, AttributeSet, BusType, EventType, InputEvent, InputId, KeyCode,
+    RelativeAxisCode,
 };
 use once_cell::sync::Lazy;
 use std::ffi::{c_int, c_uint, c_ulong, c_void, CStr};
@@ -47,7 +45,6 @@ static REAL_XTEST_RELATIVE_MOTION: Lazy<XTestFakeRelativeMotionEventFn> = Lazy::
 });
 
 static DEVICE: Lazy<Mutex<VirtualDevice>> = Lazy::new(|| {
-    let size = get_axes_range();
     Mutex::new(
         VirtualDevice::builder()
             .unwrap()
@@ -69,17 +66,8 @@ static DEVICE: Lazy<Mutex<VirtualDevice>> = Lazy::new(|| {
                 RelativeAxisCode::REL_X,
                 RelativeAxisCode::REL_Y,
                 RelativeAxisCode::REL_WHEEL,
+                RelativeAxisCode::REL_HWHEEL,
             ]))
-            .unwrap()
-            .with_absolute_axis(&UinputAbsSetup::new(
-                AbsoluteAxisCode::ABS_X,
-                AbsInfo::new(0, 0, size.width, 0, 0, 1),
-            ))
-            .unwrap()
-            .with_absolute_axis(&UinputAbsSetup::new(
-                AbsoluteAxisCode::ABS_Y,
-                AbsInfo::new(0, 0, size.height, 0, 0, 1),
-            ))
             .unwrap()
             .build()
             .unwrap(),
@@ -120,6 +108,8 @@ enum MouseButtons {
     RightClick = 3,
     ScrollUp = 4,
     ScrollDown = 5,
+    ScrollLeft = 6,
+    ScrollRight = 7,
     Side = 8,
     Extra = 9,
 }
@@ -134,6 +124,8 @@ impl TryFrom<u32> for MouseButtons {
             3 => Ok(RightClick),
             4 => Ok(ScrollUp),
             5 => Ok(ScrollDown),
+            6 => Ok(ScrollLeft),
+            7 => Ok(ScrollRight),
             8 => Ok(Side),
             9 => Ok(Extra),
             other => Err(other),
@@ -169,6 +161,25 @@ pub extern "C" fn XTestFakeButtonEvent(
                 dev.emit(&[InputEvent::new_now(
                     EventType::RELATIVE.0,
                     RelativeAxisCode::REL_WHEEL.0,
+                    value,
+                )])
+                .unwrap();
+            }
+            return 1;
+        }
+        Ok(MouseButtons::ScrollLeft | MouseButtons::ScrollRight) => {
+            // Horizontal scroll: X buttons 6 (tilt left) / 7 (tilt right).
+            // Only act on press, like the vertical wheel above.
+            if is_press {
+                let value = match button.try_into() {
+                    // evdev REL_HWHEEL: positive = right, negative = left
+                    Ok(MouseButtons::ScrollLeft) => -1,
+                    Ok(MouseButtons::ScrollRight) => 1,
+                    _ => unreachable!(),
+                };
+                dev.emit(&[InputEvent::new_now(
+                    EventType::RELATIVE.0,
+                    RelativeAxisCode::REL_HWHEEL.0,
                     value,
                 )])
                 .unwrap();
